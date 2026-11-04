@@ -11,16 +11,8 @@
     "estimate": "node tools/estimate.js",
     "serve": "python -m http.server 8080 --directory web"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/rich-hyun/mining-dashboard.git"
-  },
   "author": "",
   "license": "UNLICENSED",
-  "bugs": {
-    "url": "https://github.com/rich-hyun/mining-dashboard/issues"
-  },
-  "homepage": "https://github.com/rich-hyun/mining-dashboard#readme",
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.0.8",
     "@nomicfoundation/hardhat-ethers": "^3.0.8",
