@@ -4,11 +4,14 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.join(__dirname, "..");
-const artifact = require(path.join(root, "artifacts", "contracts", "MSTMiningReward.sol", "MSTMiningReward.json"));
+const load = (name) => require(path.join(root, "artifacts", "contracts", `${name}.sol`, `${name}.json`));
+const artifact = load("MSTMiningReward");
+const stakingArtifact = load("MSTStaking");
 const out = path.join(root, "web", "js", "abi.js");
 fs.writeFileSync(
   out,
   "// 자동 생성 — scripts/export-abi.js. 컨트랙트를 고친 뒤 다시 생성할 것.\n" +
-    `export const MINING_ABI = ${JSON.stringify(artifact.abi)};\n`
+    `export const MINING_ABI = ${JSON.stringify(artifact.abi)};\n` +
+    `export const STAKING_ABI = ${JSON.stringify(stakingArtifact.abi)};\n`
 );
 console.log(`wrote ${path.relative(root, out)} (${artifact.abi.length} entries)`);

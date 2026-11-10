@@ -25,6 +25,7 @@
   <nav class="tabs" role="tablist">
     <button role="tab" data-tab="mine" class="active" data-i18n="tabMine"></button>
     <button role="tab" data-tab="stats" data-i18n="tabStats"></button>
+    <button role="tab" data-tab="staking" data-i18n="tabStaking"></button>
     <button role="tab" data-tab="history" data-i18n="tabHistory"></button>
     <button role="tab" data-tab="admin" data-i18n="tabAdmin" hidden id="adminTabBtn"></button>
     <button role="tab" data-tab="notice" data-i18n="tabNotice"></button>
@@ -119,6 +120,37 @@
       </div>
     </section>
 
+    <!-- ───────── 스테이킹 ───────── -->
+    <section id="tab-staking" class="tab">
+      <p class="muted small" data-i18n="stkIntro"></p>
+      <p class="muted small" id="stkNone" data-i18n="stkNone" hidden></p>
+      <div id="stkBody" hidden>
+        <div class="grid">
+          <div class="tile"><div class="k" data-i18n="stkMyBalance"></div><div class="v" id="stkBalance">–</div></div>
+          <div class="tile"><div class="k" data-i18n="stkCompounded"></div><div class="v" id="stkCompounded">–</div></div>
+          <div class="tile"><div class="k" data-i18n="stkTotal"></div><div class="v" id="stkTotalAssets">–</div></div>
+          <div class="tile"><div class="k" data-i18n="stkReserve"></div><div class="v" id="stkReserve">–</div></div>
+          <div class="tile"><div class="k" data-i18n="stkRate"></div><div class="v" id="stkRate">–</div></div>
+        </div>
+        <div class="card">
+          <h3 data-i18n="stkDeposit"></h3>
+          <div class="row">
+            <input id="stkAmount" type="number" min="0" step="any" data-i18n-ph="stkAmountPh" />
+            <button id="stkStakeBtn" class="primary" type="button" data-i18n="stkStake"></button>
+          </div>
+        </div>
+        <div class="card">
+          <h3 data-i18n="stkWithdraw"></h3>
+          <div class="row">
+            <input id="stkOutAmount" type="number" min="0" step="any" data-i18n-ph="stkAmountPh" />
+            <button id="stkUnstakeBtn" type="button" data-i18n="stkUnstake"></button>
+            <button id="stkUnstakeAllBtn" type="button" data-i18n="stkUnstakeAll"></button>
+          </div>
+          <p class="muted small" data-i18n="stkNote"></p>
+        </div>
+      </div>
+    </section>
+
     <!-- ───────── 기록 ───────── -->
     <section id="tab-history" class="tab">
       <div class="section-head">
@@ -188,6 +220,10 @@
 
       <div class="card">
         <h3 data-i18n="adminOps"></h3>
+        <div class="row">
+          <input id="stakingAddr" class="mono" placeholder="0x… (MSTStaking)" />
+          <button id="stakingAddrBtn" type="button" data-i18n="setStakingAddr"></button>
+        </div>
         <label class="check"><input type="checkbox" id="stakingToggle" /> <span data-i18n="stakingEnabled"></span></label>
         <div class="row">
           <button id="pauseBtn" class="danger" type="button" data-i18n="pause"></button>

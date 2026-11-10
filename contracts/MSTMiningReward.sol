@@ -42,7 +42,7 @@ contract MSTMiningReward is AccessControl, Pausable, ReentrancyGuard {
         uint64 minShareInterval; // 같은 지갑의 연속 제출 최소 간격 (초)
     }
 
-    IMSTStaking public immutable staking;
+    IMSTStaking public staking;
     bool public stakingEnabled;
 
     Params public params;
@@ -82,6 +82,8 @@ contract MSTMiningReward is AccessControl, Pausable, ReentrancyGuard {
     event TargetBoundsUpdated(uint256 minTarget, uint256 maxTarget);
     event StakingEnabledUpdated(bool enabled);
     event RewardModeUpdated(address indexed miner, RewardMode mode);
+    event StakingContractUpdated(address indexed staking);
+    event StakeFallbackToWallet(address indexed miner, uint256 amount);
 
     error NotRegistered(address miner);
     error AlreadyRegistered(address device);
@@ -267,6 +269,13 @@ contract MSTMiningReward is AccessControl, Pausable, ReentrancyGuard {
         miningTarget = newTarget;
     }
 
+    /// @notice 스테이킹 컨트랙트를 교체한다(자동 예치를 끈 상태에서만). 채굴 컨트랙트를 다시 배포하지 않고 연결하기 위함.
+    function setStakingContract(address stakingContract) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (stakingEnabled) revert StakingUnavailable();
+        staking = IMSTStaking(stakingContract);
+        emit StakingContractUpdated(stakingContract);
+    }
+
     function setStakingEnabled(bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (enabled && address(staking) == address(0)) revert StakingUnavailable();
         stakingEnabled = enabled;
@@ -320,13 +329,17 @@ contract MSTMiningReward is AccessControl, Pausable, ReentrancyGuard {
 
         // 자동 예치를 골랐어도 스테이킹이 꺼져 있으면 지갑으로 보낸다.
         if (rewardMode[miner] == RewardMode.Stake && stakingEnabled) {
-            rewardedToStaking[miner] += amount;
-            staking.stakeFor{value: amount}(miner);
-        } else {
-            rewardedToWallet[miner] += amount;
-            (bool ok, ) = payable(miner).call{value: amount}("");
-            if (!ok) revert TransferFailed();
+            // 스테이킹 컨트랙트가 거부(일시정지 등)해도 share 제출이 막히지 않도록 지갑으로 대신 보낸다.
+            try staking.stakeFor{value: amount}(miner) {
+                rewardedToStaking[miner] += amount;
+                return amount;
+            } catch {
+                emit StakeFallbackToWallet(miner, amount);
+            }
         }
+        rewardedToWallet[miner] += amount;
+        (bool ok, ) = payable(miner).call{value: amount}("");
+        if (!ok) revert TransferFailed();
     }
 
     function _adjustAndStartEpoch() private {

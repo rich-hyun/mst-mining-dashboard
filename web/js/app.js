@@ -1,6 +1,6 @@
 import { ethers } from "../vendor/ethers-6.13.4.min.js";
 import { CONFIG } from "./config.js";
-import { MINING_ABI } from "./abi.js";
+import { MINING_ABI, STAKING_ABI } from "./abi.js";
 import { t, setLang, getLang, applyI18n } from "./i18n.js";
 
 const $ = (id) => document.getElementById(id);
@@ -13,6 +13,7 @@ const hasContract = ethers.isAddress(CONFIG.contractAddress);
 const readProvider = new ethers.JsonRpcProvider(CONFIG.rpcUrl, CONFIG.chainId, { staticNetwork: true });
 const reader = hasContract ? new ethers.Contract(CONFIG.contractAddress, MINING_ABI, readProvider) : null;
 
+let stakingReader = null; // 채굴 컨트랙트의 staking() 주소로 만든 읽기 전용 인스턴스
 const S = {
   provider: null, // ethers.BrowserProvider
   account: null,
@@ -174,6 +175,7 @@ async function refreshChain() {
         reader.params(), reader.poolBalance(), reader.registeredCount(), reader.totalAcceptedShares(),
         reader.paused(), reader.stakingEnabled(), reader.currentDay(),
       ]);
+    await refreshStaking();
     const prevChallenge = S.chain?.challenge;
     S.chain = { challenge, target, difficulty, epoch, epochShares, params, pool, devices, netShares, paused, stakingEnabled, day };
 
@@ -476,6 +478,58 @@ function render() {
   $("contractInfo").textContent = hasContract ? `Contract ${CONFIG.contractAddress} · Chain ${CONFIG.chainId}` : "";
 }
 
+// ───────────────────────── 스테이킹 ─────────────────────────
+
+async function refreshStaking() {
+  try {
+    const addr = await reader.staking();
+    if (addr === ethers.ZeroAddress) {
+      stakingReader = null;
+    } else if (!stakingReader || stakingReader.target !== addr) {
+      stakingReader = new ethers.Contract(addr, STAKING_ABI, readProvider);
+    }
+    if (!stakingReader) {
+      S.staking = null;
+    } else {
+      const a = S.account;
+      const [totalAssets, reserve, rate, balance, compounded] = await Promise.all([
+        stakingReader.totalAssetsNow(), stakingReader.rewardReserve(), stakingReader.rewardRate(),
+        a ? stakingReader.balanceOf(a) : 0n, a ? stakingReader.compoundedOf(a) : 0n,
+      ]);
+      S.staking = { totalAssets, reserve, rate, balance, compounded };
+    }
+  } catch {
+    S.staking = null;
+  }
+  renderStaking();
+}
+
+function renderStaking() {
+  const st = S.staking;
+  $("stkNone").hidden = !!st;
+  $("stkBody").hidden = !st;
+  if (!st) return;
+  $("stkBalance").textContent = S.account ? fmtMst(st.balance) : "–";
+  $("stkCompounded").textContent = S.account ? fmtMst(st.compounded) : "–";
+  $("stkTotal").textContent = fmtMst(st.totalAssets);
+  $("stkReserve").textContent = fmtMst(st.reserve);
+  $("stkRate").textContent = `${fmtMst(st.rate * 86400n)} ${t("stkPerDay")}`;
+}
+
+async function stakingSend(build) {
+  try {
+    if (!stakingReader) throw new Error(t("stkNone"));
+    const c = new ethers.Contract(stakingReader.target, STAKING_ABI, await S.provider.getSigner());
+    const tx = await build(c);
+    toast(t("logTxSent", short(tx.hash)));
+    await tx.wait();
+    toast(t("txDone"));
+    await refreshStaking();
+  } catch (e) {
+    toast(t("txFail", errMsg(e)));
+  }
+}
+
 function selectTab(name) {
   document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".tab").forEach((s) => s.classList.toggle("active", s.id === `tab-${name}`));
@@ -710,6 +764,19 @@ function bind() {
     if (target) send((c) => c.setTarget(target));
   };
   $("stakingToggle").onchange = (e) => send((c) => c.setStakingEnabled(e.target.checked));
+  $("stakingAddrBtn").onclick = () => {
+    const a = $("stakingAddr").value.trim();
+    if (ethers.isAddress(a)) send((c) => c.setStakingContract(a));
+  };
+  $("stkStakeBtn").onclick = () => {
+    const v = $("stkAmount").value;
+    if (v && Number(v) > 0) stakingSend((c) => c.stake({ value: ethers.parseEther(v) }));
+  };
+  $("stkUnstakeBtn").onclick = () => {
+    const v = $("stkOutAmount").value;
+    if (v && Number(v) > 0) stakingSend((c) => c.unstake(ethers.parseEther(v)));
+  };
+  $("stkUnstakeAllBtn").onclick = () => stakingSend((c) => c.unstakeAll());
   $("pauseBtn").onclick = () => send((c) => c.pause());
   $("unpauseBtn").onclick = () => send((c) => c.unpause());
 }

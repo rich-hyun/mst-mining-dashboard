@@ -19,6 +19,7 @@
 ```
 contracts/
   MSTMiningReward.sol        보상 컨트랙트 (Solidity 0.8.24, OpenZeppelin 5.0.2, evm london)
+  MSTStaking.sol             자동 복리 스테이킹 (지분 방식, 보상 준비금에서 고정 속도로 합산)
   interfaces/IMSTStaking.sol 자동 예치용 스테이킹 인터페이스 (stakeFor)
   mocks/MockStaking.sol      테스트용 목업
 test/                        Hardhat 테스트 (컨트랙트 24건 + 해시 일치 2건)
@@ -43,7 +44,13 @@ results/                     측정 결과
 - **보상 한도**: 1건당 `rewardPerShare` → 지갑별 하루(UTC) `dailyCapPerWallet` → 에폭별 `epochCap` → 풀 잔액 순으로 깎습니다.
   한도에 걸려도 **share는 승인**하고(처리량 기록 유지) 보상만 0 또는 일부 지급하며 `RewardWithheld(miner, reason, amount)`를 남깁니다.
 - **중복·남용 방지**: 같은 digest 재사용 금지(`DuplicateShare`), 지갑별 최소 제출 간격(`minShareInterval`), 지난 challenge 거부(`StaleChallenge`).
-- **스테이킹 연동**: 채굴자가 `setRewardMode(Wallet|Stake)`로 고릅니다. 스테이킹 주소는 생성자 인자입니다.
+- **자동 복리 스테이킹** (`MSTStaking`): 채굴자가 `setRewardMode(Stake)`를 고르면 share 보상이 `stakeFor(채굴자)`로 채굴자 명의에 바로 예치됩니다.
+  스테이킹은 ERC-4626과 같은 지분 방식이라, 운영 지갑이 `fundRewards`로 넣은 **보상 준비금**에서 초당 `rewardRate`만큼 예치 총액에 자동 합산됩니다(재예치 트랜잭션 불필요 = 복리).
+  새로 발행하지 않으며 준비금이 바닥나면 보상만 멈추고 원금은 그대로입니다. 예치자가 없을 때는 보상이 풀리지 않고, 출금은 일시정지 중에도 가능합니다.
+  스테이킹 컨트랙트가 예치를 거부하면(일시정지 등) share 제출이 막히지 않도록 그 보상은 지갑으로 대신 지급되고 `StakeFallbackToWallet`이 남습니다.
+  채굴 컨트랙트는 `setStakingContract(addr)`로 스테이킹을 교체/연결할 수 있어(자동 예치를 끈 상태에서만) 재배포가 필요 없습니다. 화면에는 "스테이킹" 탭(예치·출금·합쳐진 보상 누계)이 있습니다.
+  배포: `npx hardhat run scripts/deploy-staking.js --network mustsem` (`STAKING_REWARD_PER_DAY`, `STAKING_INITIAL_RESERVE`, `MINING_ADDRESS`), 이후 관리자 화면에서 자동 예치를 켭니다.
+- **(참고) 기존 Mustsem 스테이킹**: 채굴자가 `setRewardMode(Wallet|Stake)`로 고릅니다. 스테이킹 주소는 생성자 인자입니다.
   현재 Mustsem 스테이킹(`0x8Fb0…7D07`)은 `stake(uint256)`로 **호출자 본인 명의의 wMST만** 받기 때문에, 채굴 컨트랙트가 대신 넣으면 채굴자가 아니라 컨트랙트 명의가 됩니다.
   그래서 이번 단계에서는 **즉시 지급만 사용**하고(`stakingEnabled = false`), `IMSTStaking.stakeFor(address)`를 구현한 스테이킹 컨트랙트가 배포되면 `setStakingEnabled(true)`로 켭니다. 동작은 목업으로 테스트되어 있습니다.
 - **역할**: `DEFAULT_ADMIN_ROLE`(풀 회수, 일시정지, 난이도 범위, 스테이킹 on/off, 역할 관리), `REGISTRAR_ROLE`(장치 등록·해제), `PARAMS_ROLE`(보상·상한·난이도 값).
@@ -172,7 +179,7 @@ node tools/estimate.js --pool 10000 --hours 24
 
 ## 남은 일
 
-- 스테이킹: `stakeFor(address)`를 지원하는 스테이킹 컨트랙트(또는 어댑터) 배포 후 `STAKING_ADDRESS`로 재배포하거나 새 버전에서 연결
+- `MSTStaking` 메인넷 배포 + 준비금 충전 + `setStakingContract`/`setStakingEnabled(true)` (이미 배포된 채굴 컨트랙트는 `staking`이 immutable이던 버전이므로 새 버전으로 재배포가 한 번 필요)
 - 블록 탐색기 주소 확정 후 `explorerUrl` 설정
 - GPU(WebGPU) 채굴·측정 버전
 - VYD 체인 DataProvenanceRegistry에 측정 CSV 해시 등록 (이번 단계에서는 제외)
